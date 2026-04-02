@@ -304,12 +304,14 @@ fig.savefig(os.path.join(plot_dir, 'binned_temporal_evolution_features_cutoff_20
 plt.close()
 
 # Line (error) plots
+cut_smoothed_binned_X = []
 fig, ax = plt.subplots(X.shape[1], 2, figsize=(5, 10), sharex=True)
 for i in range(X.shape[1]):
     ax[i,0].plot(cut_bins[:-1], cut_binned_X[:, i], '.-', label='Actual')
     ax[i,1].errorbar(cut_bins[:-1], cut_binned_X[:, i], yerr=cut_binned_X_std[:, i], fmt='.-', label='Actual')
     # Also plot smoothed version of the line
     smoothed = savgol_filter(cut_binned_X[:, i], 5, 2)
+    cut_smoothed_binned_X.append(smoothed)
     ax[i,0].plot(cut_bins[:-1], smoothed, 'r-', alpha=0.7, label='Smoothed')
     ax[i,0].set_ylabel(f'Feature {i}')
 ax[-1].set_xlabel('Binned Start Time')
@@ -320,3 +322,46 @@ plt.tight_layout()
 fig.savefig(os.path.join(plot_dir, 'binned_temporal_evolution_individual_features_cutoff_200ms.png'), dpi=300)
 plt.close()
 
+cut_smoothed_binned_X = np.array(cut_smoothed_binned_X).T
+
+# PCA
+pca = PCA(n_components=3)
+pca.fit(cut_smoothed_binned_X)
+cut_binned_X_pca = pca.transform(cut_smoothed_binned_X).T
+
+fig = plt.figure(figsize=(8, 6))
+ax = fig.add_subplot(111, projection='3d')
+im = ax.scatter(
+        cut_binned_X_pca[0], 
+        cut_binned_X_pca[1], 
+        cut_binned_X_pca[2], 
+        c=cut_bins[:-1], cmap='viridis', 
+        edgecolor='k', alpha=0.7, s=100)
+# Also plot smoothed version of the line
+ax.plot(cut_binned_X_pca[0], cut_binned_X_pca[1], cut_binned_X_pca[2], 
+        color='k', alpha=0.3, label='Smoothed Binned Features')
+ax.set_xlabel('Smoothed Binned Feature 1')
+ax.set_ylabel('Smoothed Binned Feature 2')
+ax.set_zlabel('Smoothed Binned Feature 3')
+ax.set_title('Smoothed Binned Feature Space (Cutoff at 200ms)')
+plt.colorbar(im, label='Binned Start Time')
+fig.savefig(os.path.join(plot_dir, 'smoothed_binned_feature_space_cutoff_200ms.png'), dpi=300)
+plt.close()
+
+# And the original features in the same PCA space
+cut_X_pca = pca.transform(cut_X).T
+fig = plt.figure(figsize=(5, 5))
+ax = fig.add_subplot(111, projection='3d')
+im = ax.scatter(
+        cut_X_pca[0],
+        cut_X_pca[1],
+        cut_X_pca[2],
+        c=cut_y, cmap='viridis',
+        edgecolor='k', alpha=0.7, s=10)
+ax.set_xlabel('PCA Feature 1')
+ax.set_ylabel('PCA Feature 2')
+ax.set_zlabel('PCA Feature 3')
+ax.set_title('Original Feature Space in PCA Projection (Cutoff at 200ms)')
+plt.colorbar(im, label='Start Time')
+fig.savefig(os.path.join(plot_dir, 'original_feature_space_pca_projection_cutoff_200ms.png'), dpi=300)
+plt.close()
