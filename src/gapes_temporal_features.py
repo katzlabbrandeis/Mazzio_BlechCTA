@@ -163,8 +163,8 @@ plt.close()
 
 # Plot smoothed binned features in 3D PCA 
 pca = PCA(n_components=3)
-pca.fit(smoothed_binned_X.T)
-smoothed_binned_X_pca = pca.transform(smoothed_binned_X.T).T
+pca.fit(smoothed_binned_X)
+smoothed_binned_X_pca = pca.transform(smoothed_binned_X).T
 
 fig = plt.figure(figsize=(8, 6))
 ax = fig.add_subplot(111, projection='3d')
@@ -252,3 +252,71 @@ ax.set_zlabel('New Feature 3')
 ax.set_title('New Feature Space from MLP')
 plt.colorbar(label='Start Time')
 plt.show()
+
+############################################################
+# A lot of variability seems to be present in the first 200ms
+# Cut that out and replot to see if we can get a clearer picture of the later time points
+# Including a better representation of time in the PCA
+
+cutoff_time = 2200
+cut_inds = sorted_y > cutoff_time
+
+cut_y = sorted_y[cut_inds] 
+cut_X = sorted_X[cut_inds] 
+
+fig, ax = plt.subplots(cut_X.shape[1], 1, figsize=(5, 10), sharex=True)
+for i in range(cut_X.shape[1]):
+    ax[i].plot(cut_y, cut_X[:, i], '.')
+    ax[i].set_ylabel(f'Feature {i}')
+ax[-1].set_xlabel('Start Time')
+plt.suptitle('Temporal Evolution of Individual Features (Cutoff at 200ms)')
+fig.savefig(os.path.join(plot_dir, 'temporal_evolution_individual_features_cutoff_200ms.png'), dpi=300)
+plt.close()
+
+# Same with binned features
+cut_bins = bins[bins > cutoff_time]
+cut_binned_X = binned_X[bins[:-1] > cutoff_time]
+cut_binned_X_std = binned_X_std[bins[:-1] > cutoff_time]
+
+fig, ax = plt.subplots(1,2, figsize=(8, 4))
+im = ax[0].pcolormesh(
+    np.arange(cut_binned_X.shape[1]),
+    cut_bins[:-1],
+    cut_binned_X,
+    shading='auto',
+    cmap='jet'
+    )
+ax[0].set_xlabel('Feature Index')
+ax[0].set_ylabel('Binned Start Time')
+ax[0].set_title('Feature Mean (Cutoff at 200ms)')
+plt.colorbar(im, ax=ax[0], label='Mean Feature Value (Standardized)')
+ax[1].pcolormesh(
+    np.arange(cut_binned_X_std.shape[1]),
+    cut_bins[:-1],
+    cut_binned_X_std,
+    shading='auto',
+    cmap='jet'
+    )
+ax[1].set_xlabel('Feature Index')
+ax[1].set_title('Feature Std Dev (Cutoff at 200ms)')
+plt.colorbar(im, ax=ax[1], label='Std Dev of Feature Value (Standardized)')
+fig.savefig(os.path.join(plot_dir, 'binned_temporal_evolution_features_cutoff_200ms.png'), dpi=300)
+plt.close()
+
+# Line (error) plots
+fig, ax = plt.subplots(X.shape[1], 2, figsize=(5, 10), sharex=True)
+for i in range(X.shape[1]):
+    ax[i,0].plot(cut_bins[:-1], cut_binned_X[:, i], '.-', label='Actual')
+    ax[i,1].errorbar(cut_bins[:-1], cut_binned_X[:, i], yerr=cut_binned_X_std[:, i], fmt='.-', label='Actual')
+    # Also plot smoothed version of the line
+    smoothed = savgol_filter(cut_binned_X[:, i], 5, 2)
+    ax[i,0].plot(cut_bins[:-1], smoothed, 'r-', alpha=0.7, label='Smoothed')
+    ax[i,0].set_ylabel(f'Feature {i}')
+ax[-1].set_xlabel('Binned Start Time')
+plt.suptitle('Binned Temporal Evolution of Individual Features (Cutoff at 200ms)')
+# Put legend at bottom of figure
+plt.legend(loc='lower center', bbox_to_anchor=(0.5, -1), ncol=2)
+plt.tight_layout()
+fig.savefig(os.path.join(plot_dir, 'binned_temporal_evolution_individual_features_cutoff_200ms.png'), dpi=300)
+plt.close()
+
