@@ -1,0 +1,7 @@
+Location of STFT files:
+
+Individual animal datadir → LFP_analyses → only pickle file inside 
+
+Code:
+
+plot_LFP_spectrogram.py: runs STFT from ephys.data and saves pickle files with amplitude array and taste list
