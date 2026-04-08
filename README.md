@@ -1,6 +1,22 @@
 # BlechCTA
 Scripts used for Christina's Ph.D. thesis on neural mechanisms underlying learned and non-learned gaping.
-Order of operations:
+
+## Repository Structure
+
+- `src/` - Source code for analysis modules
+  - `gape_temporal_difference/` - Temporal analysis of gaping behavior
+  - `multibehavior_transition/` - Multi-behavior transition analysis
+- `data/` - Processed data files
+  - `changepoint_gapes/` - Changepoint detection data for gapes
+  - `multibehavior_transition/` - Behavior transition data
+- `artifacts/` - Generated analysis artifacts
+  - `changepoint_gapes/` - Sorted features and labels
+- `plots/` - Generated visualization outputs
+  - `changepoint_gapes/` - Gape-related plots
+  - `multibehavior_transition/` - Behavior transition plots
+- Root-level scripts - Main analysis pipeline scripts
+
+## Order of Operations
 
 Initial set-up:
 1. Run each session recording through Pytau, Blech_EMG_Classifier, and BlechClust packages before running this package.
