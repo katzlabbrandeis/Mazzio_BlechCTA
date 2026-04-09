@@ -21,13 +21,27 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
+import umap
+from sklearn.decomposition import PCA
 
-base_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/src/lfp_analysis'
-artifacts_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/artifacts/lfp_analysis'
-plot_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/plots/lfp_analysis'
+# base_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA'
+base_dir = '/media/bigdata/firing_space_plot/Mazzio_BlechCTA'
+# src_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/src/lfp_analysis'
+# artifacts_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/artifacts/lfp_analysis'
+# plot_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/plots/lfp_analysis'
+src_dir = os.path.join(base_dir, 'src', 'lfp_analysis')
+artifacts_dir = os.path.join(base_dir, 'artifacts', 'lfp_analysis')
+plot_dir = os.path.join(base_dir, 'plots', 'lfp_analysis')
 os.makedirs(artifacts_dir, exist_ok=True)
 os.makedirs(plot_dir, exist_ok=True)
-data_dirs_file = os.path.join(base_dir, 'data_dirs_LFP.txt')
+
+lfp_med_out_dir = os.path.join(artifacts_dir, 'pre_stim_data')
+
+############################################################
+# Extraction from original data 
+# (takes a long time, and uses a lot of memory, so we save the extracted data for easier access in future steps)
+############################################################
+data_dirs_file = os.path.join(src_dir, 'data_dirs_LFP.txt')
 # Read data directories from text file
 with open(data_dirs_file, 'r') as f:
     data_dirs = [line.strip() for line in f.readlines()]
@@ -48,7 +62,6 @@ for data_dir in tqdm(data_dirs):
 pkl_df = pd.DataFrame(pkl_files)
 
 # Load each pickle file and extract data for single channel (e.g., channel 0)
-lfp_med_out_dir = os.path.join(artifacts_dir, 'pre_stim_data')
 os.makedirs(lfp_med_out_dir, exist_ok=True)
 
 pre_stim_data = []
@@ -100,6 +113,28 @@ for this_row in tqdm(pkl_df.iterrows(), total=len(pkl_df)):
     with open(out_path, 'wb') as f:
         pd.to_pickle(out_dict, f)
 
+############################################################
+############################################################
+
+# Extract behavioral changepoints and try to align with LFP data (not sure if this will work but worth a try)
+# transition_data_dir = '/media/bigdata/firing_space_plot/emg_analysis/CM_behavior_transitions/data'
+# *** Repo was reorganized ***
+transition_data_dir = '/media/bigdata/firing_space_plot/Mazzio_BlechCTA/data/multibehavior_transition'
+# out_df_file = 'behavior_changepoint_out_df.pkl'
+# with open(os.path.join(data_dir, out_df_file), 'wb') as f:
+#     pd.to_pickle(out_df, f)
+behavior_chp_df = pd.read_pickle(os.path.join(transition_data_dir, 'behavior_changepoint_out_df.pkl'))
+# Index(['basename', 'taste', 'taste_trials', 'taste_behavior_array',
+# 'zscored_taste_behavior_array', 'tau_samples', 'mode_changepoint'],
+
+# Check if 'basename' in behavior_chp_df matches 'animal' in pre_stim_data 
+# set(behavior_chp_df['basename']).intersection(set(compiled_df['animal']))
+len(np.setdiff1d(
+    behavior_chp_df['basename'].unique(), 
+    compiled_df['animal'].unique()
+))
+
+##############################
 # Compile everything into a single dataframe for easier access
 compiled_data_file_list = os.listdir(lfp_med_out_dir)
 compiled_data = [
@@ -109,6 +144,9 @@ compiled_df = pd.DataFrame(compiled_data)
 # 'pre_stim_med' column contains list of arrays (one for each taste) with shape (n_trials, n_freqs) 
 # Make plots
 
+this_plot_dir = os.path.join(plot_dir, 'pre_stim_spectrograms')
+os.makedirs(this_plot_dir, exist_ok=True)
+
 for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
     pre_stim_med = this_row['pre_stim_med']
     taste_list = this_row['taste_list']
@@ -116,9 +154,14 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
 
     assert len(pre_stim_med) == len(taste_list), f"Expected pre_stim_med and taste_list to have same length, got {len(pre_stim_med)} and {len(taste_list)}"
 
+    # Try to find corresponding behavior changepoint data for this animal
+    chp_data = behavior_chp_df.query(f'basename == "{this_row["animal"]}"')
+
     fig, ax = plt.subplots(2, len(taste_list), figsize=(2*len(taste_list), 5),
                            sharex=True, sharey='col')
     for i, taste in enumerate(taste_list):
+        # Make taste lower to match with behavior changepoint data
+        taste = taste.lower()
         im = ax[0,i].pcolormesh(
             freq_vec, 
             np.arange(pre_stim_med[i].shape[0]), 
@@ -140,9 +183,194 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
         ax[1,i].set_ylabel('Trial')
         ax[1,i].set_xlabel('Frequency (Hz)')
 
+        if len(chp_data) > 0:
+            chp_row = chp_data.query(f'taste == "{taste}"')
+            if len(chp_row) > 0:
+                mode_chp = chp_row['mode_changepoint'].values[0]
+                ax[0,i].axhline(mode_chp, color='red', linestyle='--', label='Behavior Changepoint')
+                ax[1,i].axhline(mode_chp, color='red', linestyle='--', label='Behavior Changepoint')
+
+            # Put legend below the figure
+            handles, labels = ax[0,i].get_legend_handles_labels()
+            fig.legend(handles, labels, loc='lower center') 
+
     fig.suptitle(f"Pre-stimulus LFP Spectrogram for {this_row['animal']}")
     plt.tight_layout()
-    plt_path = os.path.join(plot_dir, f"{this_row['animal']}_pre_stim_spectrogram.png")
+    plt_path = os.path.join(this_plot_dir, f"{this_row['animal']}_pre_stim_spectrogram.png")
     plt.savefig(plt_path)
     plt.close()
 
+##############################
+# For matching lfp and behavior data, plot average before and after changepoint for each taste, and see if there are any differences in the spectrograms 
+
+chp_lfp_data = []
+for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
+    pre_stim_med = this_row['pre_stim_med']
+    taste_list = this_row['taste_list']
+    freq_vec = this_row['freq_vec']
+
+    assert len(pre_stim_med) == len(taste_list), f"Expected pre_stim_med and taste_list to have same length, got {len(pre_stim_med)} and {len(taste_list)}"
+
+    # Try to find corresponding behavior changepoint data for this animal
+    chp_data = behavior_chp_df.query(f'basename == "{this_row["animal"]}"')
+    if len(chp_data) == 0:
+        continue
+
+    for i, taste in enumerate(taste_list):
+        # Make taste lower to match with behavior changepoint data
+        taste = taste.lower()
+        chp_row = chp_data.query(f'taste == "{taste}"')
+        if len(chp_row) == 0:
+            continue
+        mode_chp = chp_row['mode_changepoint'].values[0]
+
+        pre_chp_data = pre_stim_med[i][:mode_chp, :]
+        post_chp_data = pre_stim_med[i][mode_chp:, :]
+
+        pre_chp_med = np.median(pre_chp_data, axis=0)
+        post_chp_med = np.median(post_chp_data, axis=0)
+
+        out_dict = {
+            'animal': this_row['animal'],
+            'taste': taste,
+            'pre_chp_med': pre_chp_med,
+            'post_chp_med': post_chp_med,
+            'freq_vec': freq_vec
+        }
+        chp_lfp_data.append(out_dict)
+
+chp_lfp_df = pd.DataFrame(chp_lfp_data)
+# Explode pre_chp_med, post_chp_med, and freq_vec into long format for easier plotting
+# chp_lfp_long_df = chp_lfp_df.explode(['pre_chp_med', 'post_chp_med', 'freq_vec'])
+
+# Plot pre and post changepoint medians for each taste, stacked
+med_diff_data_z_list = []
+MAD_diff_data_z_list = []
+n_tastes = chp_lfp_df['taste'].nunique()
+fig, ax = plt.subplots(n_tastes, 4, figsize=(15, 3*n_tastes),
+                       sharex=True) 
+taste_grouped = chp_lfp_df.groupby('taste')
+for ind, (taste_name, this_df) in enumerate(taste_grouped):
+    pre_data = np.stack(this_df['pre_chp_med'].values)
+    post_data = np.stack(this_df['post_chp_med'].values)
+    
+    # zscore across animals for each frequency, but collectively for pre and post data to make them comparable
+    combined_data = np.concatenate([pre_data, post_data], axis=0)
+    combined_mean = np.nanmean(combined_data, axis=0)
+    combined_std = np.nanstd(combined_data, axis=0)
+    combined_data_z = (combined_data - combined_mean) / combined_std
+    pre_data_z = combined_data_z[:pre_data.shape[0], :]
+    post_data_z = combined_data_z[pre_data.shape[0]:, :]
+
+    diff_data_z = post_data_z - pre_data_z
+    # Drop any rows with NaN values (in case there are frequencies with NaN values for some animals)
+    valid_inds = ~np.isnan(diff_data_z).any(axis=1)
+    valid_diff_data_z = diff_data_z[valid_inds, :]
+    med_diff_data_z = np.median(valid_diff_data_z, axis=0)
+    MAD_diff_data_z = np.median(np.abs(valid_diff_data_z - med_diff_data_z), axis=0)
+    med_diff_data_z_list.append(med_diff_data_z)
+    MAD_diff_data_z_list.append(MAD_diff_data_z)
+
+    freq_vec = this_df['freq_vec'].values[0]
+
+    im = ax[ind, 0].pcolormesh(
+        freq_vec,
+        np.arange(pre_data.shape[0]),
+        pre_data_z,
+        shading='auto'
+        )
+    ax[ind, 0].set_title(f"{taste_name} - Pre Changepoint")
+    ax[ind, 0].set_ylabel('Animal')
+    ax[ind, 0].set_xlabel('Frequency (Hz)')
+    im = ax[ind, 1].pcolormesh(
+        freq_vec,
+        np.arange(post_data.shape[0]),
+        post_data_z,
+        shading='auto'
+        )
+    ax[ind, 1].set_title(f"{taste_name} - Post Changepoint")
+    ax[ind, 1].set_ylabel('Animal')
+    ax[ind, 1].set_xlabel('Frequency (Hz)')
+    im = ax[ind, 2].pcolormesh(
+        freq_vec,
+        np.arange(pre_data.shape[0]),
+        diff_data_z,
+        shading='auto',
+        cmap='bwr',
+        )
+    ax[ind, 2].set_title(f"{taste_name} - Post - Pre Changepoint")
+    ax[ind, 2].set_ylabel('Animal')
+    ax[ind, 2].set_xlabel('Frequency (Hz)')
+    ax[ind, 3].errorbar(
+        freq_vec,
+        med_diff_data_z,
+        yerr=MAD_diff_data_z,
+        fmt='-o'
+        )
+    ax[ind, 3].set_title(f"{taste_name} - Median Post - Pre Changepoint")
+    ax[ind, 3].set_ylabel('Difference of Z-scored Power')
+    ax[ind, 3].set_xlabel('Frequency (Hz)')
+    ax[ind, 3].axhline(0, color='k', linestyle='--', linewidth=1.5)
+fig.suptitle("Pre and Post Changepoint Median Spectrograms for Each Taste")
+plt.tight_layout()
+plt_path = os.path.join(plot_dir, 'pre_post_changepoint_spectrograms.png')
+plt.savefig(plt_path, bbox_inches='tight')
+plt.close()
+
+# Break down into frequency bands and plot
+freq_bands = {
+        'delta': [1, 4],
+        'theta': [4, 8],
+        'alpha': [8, 12],
+        'beta': [12, 30],
+        'gamma': [30, 100]
+        }
+
+##############################
+# Plot median difference of z-scored power between pre and post changepoint for each taste, with filled area representing MAD 
+fig, ax = plt.subplots(figsize=(5, 5))
+for ind, taste_name in enumerate(taste_grouped.groups.keys()):
+    freq_vec = chp_lfp_df.query(f'taste == "{taste_name}"')['freq_vec'].values[0]
+    med_diff_data_z = med_diff_data_z_list[ind]
+    MAD_diff_data_z = MAD_diff_data_z_list[ind]
+    ax.plot(freq_vec, med_diff_data_z, label=taste_name, linewidth=2)
+    ax.fill_between(freq_vec, med_diff_data_z - MAD_diff_data_z, med_diff_data_z + MAD_diff_data_z, alpha=0.3)
+ax.set_title("Median Difference of Z-scored Power Between Pre and Post Changepoint for Each Taste")
+ax.set_xlabel('Frequency (Hz)')
+ax.set_ylabel('Difference of Z-scored Power')
+ax.axhline(0, color='k', linestyle='--', linewidth=1.5)
+ax.legend()
+plt.tight_layout()
+plt_path = os.path.join(plot_dir, 'median_diff_z_power_pre_post_changepoint.png')
+plt.savefig(plt_path, bbox_inches='tight')
+plt.close()
+
+# Plot umap of pre and post changepoint data for each taste, colored by pre vs post changepoint
+embedding_data = []
+taste_grouped = chp_lfp_df.groupby('taste')
+for taste_name, this_df in taste_grouped:
+    pre_data = np.stack(this_df['pre_chp_med'].values)
+    post_data = np.stack(this_df['post_chp_med'].values)
+    data = np.concatenate([pre_data, post_data], axis=0)
+    labels = ['pre'] * pre_data.shape[0] + ['post'] * post_data.shape[0]
+
+    # First do PCA to reduce dimensionality to 90% variance explained, then do UMAP on the PCA components
+    pca = PCA(n_components=0.9)
+    pca_data = pca.fit_transform(data.T).T
+
+    # If >3 dims, do UMAP to reduce to 2D for visualization
+    if pca_data.shape[0] < 3:
+        transform_name = 'pca'
+        plot_data = pca_data.T
+    else:
+        reducer = umap.UMAP()
+        embedding = reducer.fit_transform(pca_data.T)
+        transform_name = 'pca + umap'
+        plot_data = embedding
+    out_dict = {
+        'taste': taste_name,
+        'data': plot_data,
+        'labels': labels,
+        'transform': transform_name
+    }
+    embedding_data.append(out_dict)
