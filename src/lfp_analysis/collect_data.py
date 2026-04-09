@@ -19,9 +19,14 @@ from tqdm import tqdm
 from pprint import pprint as pp
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from scipy import stats
 
 base_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/src/lfp_analysis'
 artifacts_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/artifacts/lfp_analysis'
+plot_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA/plots/lfp_analysis'
+os.makedirs(artifacts_dir, exist_ok=True)
+os.makedirs(plot_dir, exist_ok=True)
 data_dirs_file = os.path.join(base_dir, 'data_dirs_LFP.txt')
 # Read data directories from text file
 with open(data_dirs_file, 'r') as f:
@@ -94,3 +99,50 @@ for this_row in tqdm(pkl_df.iterrows(), total=len(pkl_df)):
     }
     with open(out_path, 'wb') as f:
         pd.to_pickle(out_dict, f)
+
+# Compile everything into a single dataframe for easier access
+compiled_data_file_list = os.listdir(lfp_med_out_dir)
+compiled_data = [
+    pd.read_pickle(os.path.join(lfp_med_out_dir, f)) for f in compiled_data_file_list if f.endswith('.pkl')
+]
+compiled_df = pd.DataFrame(compiled_data)
+# 'pre_stim_med' column contains list of arrays (one for each taste) with shape (n_trials, n_freqs) 
+# Make plots
+
+for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
+    pre_stim_med = this_row['pre_stim_med']
+    taste_list = this_row['taste_list']
+    freq_vec = this_row['freq_vec']
+
+    assert len(pre_stim_med) == len(taste_list), f"Expected pre_stim_med and taste_list to have same length, got {len(pre_stim_med)} and {len(taste_list)}"
+
+    fig, ax = plt.subplots(2, len(taste_list), figsize=(2*len(taste_list), 5),
+                           sharex=True, sharey='col')
+    for i, taste in enumerate(taste_list):
+        im = ax[0,i].pcolormesh(
+            freq_vec, 
+            np.arange(pre_stim_med[i].shape[0]), 
+            pre_stim_med[i], 
+            shading='auto'
+        )
+        ax[0,i].set_title(taste)
+        ax[0,i].set_ylabel('Trial')
+        ax[0,i].set_xlabel('Frequency (Hz)')
+        # Also plot zscored version (across trials for same frequency) of the data
+        pre_stim_med_z = stats.zscore(pre_stim_med[i], axis=0)
+        im = ax[1,i].pcolormesh(
+            freq_vec, 
+            np.arange(pre_stim_med_z.shape[0]), 
+            pre_stim_med_z, 
+            shading='auto'
+        )
+        ax[1,i].set_title(f"{taste} (z-scored)")
+        ax[1,i].set_ylabel('Trial')
+        ax[1,i].set_xlabel('Frequency (Hz)')
+
+    fig.suptitle(f"Pre-stimulus LFP Spectrogram for {this_row['animal']}")
+    plt.tight_layout()
+    plt_path = os.path.join(plot_dir, f"{this_row['animal']}_pre_stim_spectrogram.png")
+    plt.savefig(plt_path)
+    plt.close()
+
