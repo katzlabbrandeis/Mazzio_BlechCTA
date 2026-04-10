@@ -324,7 +324,8 @@ freq_bands = {
         'theta': [4, 8],
         'alpha': [8, 12],
         'beta': [12, 30],
-        'gamma': [30, 100]
+        'low_gamma': [30, 70],
+        'high_gamma': [70, 120]
         }
 
 # Calculate band power for pre and post changepoint for each animal and taste
@@ -474,12 +475,12 @@ for ax_ind, (taste_name, taste_df) in enumerate(taste_grouped):
     ax.set_ylabel('Normalized Power (to mean)')
     ax.set_title(f'{taste_name.capitalize()}')
     ax.set_xticks(x_positions)
-    ax.set_xticklabels(band_names)
+    ax.set_xticklabels(band_names, rotation=45)
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
     ax.axhline(1.0, color='k', linestyle='--', linewidth=1, alpha=0.5)  # Reference line at normalized mean
 
-fig.suptitle('Normalized Band Power: Pre vs Post Changepoint\n(* p<0.05, ** p<0.01, *** p<0.001, ns=not significant)', 
+fig.suptitle(f'Normalized Band Power: Pre vs Post Changepoint\n(* p<0.05, ** p<0.01, *** p<0.001, ns=not significant)\n{freq_bands}', 
              fontsize=14, y=1.02)
 plt.tight_layout()
 plt_path = os.path.join(plot_dir, 'band_power_pre_post_changepoint_paired_normalized.png')
