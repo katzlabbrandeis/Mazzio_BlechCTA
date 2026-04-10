@@ -487,6 +487,116 @@ plt_path = os.path.join(plot_dir, 'band_power_pre_post_changepoint_paired_normal
 plt.savefig(plt_path, bbox_inches='tight', dpi=300)
 plt.close()
 
+# Create bar plots organized by frequency band (subplots) with tastes on x-axis
+n_bands = len(freq_bands)
+n_cols = 3
+n_rows = int(np.ceil(n_bands / n_cols))
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows), sharey=True)
+axes = axes.flatten()
+
+band_names = list(freq_bands.keys())
+for band_idx, band_name in enumerate(band_names):
+    ax = axes[band_idx]
+    
+    # Get data for this band across all tastes
+    band_data = norm_band_power_df[norm_band_power_df['band'] == band_name]
+    
+    if len(band_data) == 0:
+        ax.set_visible(False)
+        continue
+    
+    # Get unique tastes and calculate statistics
+    tastes = sorted(band_data['taste'].unique())
+    x_positions = np.arange(len(tastes))
+    bar_width = 0.35
+    
+    pre_means = []
+    pre_sems = []
+    post_means = []
+    post_sems = []
+    p_values = []
+    
+    for taste in tastes:
+        taste_data = band_data[band_data['taste'] == taste]
+        if len(taste_data) > 0:
+            pre_means.append(taste_data['norm_pre_power'].mean())
+            pre_sems.append(taste_data['norm_pre_power'].sem())
+            post_means.append(taste_data['norm_post_power'].mean())
+            post_sems.append(taste_data['norm_post_power'].sem())
+            
+            # Perform paired t-test
+            if len(taste_data) > 1:
+                t_stat, p_val = stats.ttest_rel(taste_data['norm_pre_power'], taste_data['norm_post_power'])
+                p_values.append(p_val)
+            else:
+                p_values.append(np.nan)
+        else:
+            pre_means.append(0)
+            pre_sems.append(0)
+            post_means.append(0)
+            post_sems.append(0)
+            p_values.append(np.nan)
+    
+    # Plot bars
+    ax.bar(x_positions - bar_width/2, pre_means, bar_width, 
+           yerr=pre_sems, label='Pre-changepoint', alpha=0.7, capsize=5)
+    ax.bar(x_positions + bar_width/2, post_means, bar_width,
+           yerr=post_sems, label='Post-changepoint', alpha=0.7, capsize=5)
+    
+    # Overlay paired scatter plots
+    for taste_idx, taste in enumerate(tastes):
+        taste_data = band_data[band_data['taste'] == taste]
+        if len(taste_data) > 0:
+            # Add jitter to x positions for visibility
+            jitter = 0.05
+            pre_x = np.random.normal(x_positions[taste_idx] - bar_width/2, jitter, size=len(taste_data))
+            post_x = np.random.normal(x_positions[taste_idx] + bar_width/2, jitter, size=len(taste_data))
+            
+            # Plot individual animal data points
+            for i, (idx, row) in enumerate(taste_data.iterrows()):
+                ax.plot([pre_x[i], post_x[i]], [row['norm_pre_power'], row['norm_post_power']], 
+                       'o-', color='gray', alpha=0.5, markersize=4, linewidth=1)
+    
+    # Add significance stars above bars
+    y_max = max(max(pre_means), max(post_means)) if pre_means and post_means else 1
+    for taste_idx, p_val in enumerate(p_values):
+        if not np.isnan(p_val):
+            if p_val < 0.001:
+                sig_text = '***'
+            elif p_val < 0.01:
+                sig_text = '**'
+            elif p_val < 0.05:
+                sig_text = '*'
+            else:
+                sig_text = 'ns'
+            
+            # Place significance marker above the bars
+            y_pos = y_max * 1.1
+            ax.text(x_positions[taste_idx], y_pos, sig_text, 
+                   ha='center', va='bottom', fontsize=10)
+    
+    ax.set_xlabel('Taste')
+    ax.set_ylabel('Normalized Power (to mean)')
+    band_range = freq_bands[band_name]
+    ax.set_title(f'{band_name.capitalize()} ({band_range[0]}-{band_range[1]} Hz)')
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([t.capitalize() for t in tastes], rotation=45, ha='right')
+    if band_idx == 0:
+        ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    ax.axhline(1.0, color='k', linestyle='--', linewidth=1, alpha=0.5)  # Reference line at normalized mean
+
+# Hide any unused subplots
+for idx in range(n_bands, len(axes)):
+    axes[idx].set_visible(False)
+
+fig.suptitle('Normalized Band Power by Taste: Pre vs Post Changepoint\n(* p<0.05, ** p<0.01, *** p<0.001, ns=not significant)', 
+             fontsize=14, y=0.995)
+plt.tight_layout()
+plt_path = os.path.join(plot_dir, 'band_power_by_taste_pre_post_changepoint_paired_normalized.png')
+plt.savefig(plt_path, bbox_inches='tight', dpi=300)
+plt.close()
+
 ##############################
 # Plot median difference of z-scored power between pre and post changepoint for each taste, with filled area representing MAD 
 fig, ax = plt.subplots(figsize=(5, 5))
