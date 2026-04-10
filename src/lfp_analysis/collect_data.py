@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import umap
 from sklearn.decomposition import PCA
+import pingouin as pg
 
 # base_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA'
 base_dir = '/media/bigdata/firing_space_plot/Mazzio_BlechCTA'
@@ -486,6 +487,92 @@ plt.tight_layout()
 plt_path = os.path.join(plot_dir, 'band_power_pre_post_changepoint_paired_normalized.png')
 plt.savefig(plt_path, bbox_inches='tight', dpi=300)
 plt.close()
+
+# Prepare data for 2-way ANOVA (pre/post x taste)
+# Convert normalized band power data to long format for ANOVA
+anova_data_list = []
+for idx, row in norm_band_power_df.iterrows():
+    # Add pre-changepoint data
+    anova_data_list.append({
+        'animal': row['animal'],
+        'taste': row['taste'],
+        'band': row['band'],
+        'condition': 'pre',
+        'power': row['norm_pre_power']
+    })
+    # Add post-changepoint data
+    anova_data_list.append({
+        'animal': row['animal'],
+        'taste': row['taste'],
+        'band': row['band'],
+        'condition': 'post',
+        'power': row['norm_post_power']
+    })
+
+anova_df = pd.DataFrame(anova_data_list)
+
+# Perform 2-way ANOVA for each frequency band
+print("\n" + "="*80)
+print("2-WAY ANOVA RESULTS: Condition (Pre/Post) x Taste")
+print("="*80)
+
+anova_results_list = []
+for band_name in freq_bands.keys():
+    band_anova_df = anova_df[anova_df['band'] == band_name]
+    
+    if len(band_anova_df) > 0 and len(band_anova_df['taste'].unique()) > 1:
+        # Perform 2-way repeated measures ANOVA
+        # Note: Using mixed_anova since we have within-subject factor (condition) and between-subject factor (taste)
+        # However, if same animals are in all tastes, we should use rm_anova with both factors
+        
+        # Check if we have repeated measures (same animals across tastes)
+        animals_per_taste = band_anova_df.groupby('taste')['animal'].apply(set)
+        all_animals = set.union(*animals_per_taste.values)
+        
+        # Use rm_anova if we have the same animals across conditions
+        try:
+            aov = pg.rm_anova(
+                data=band_anova_df,
+                dv='power',
+                within=['condition', 'taste'],
+                subject='animal',
+                detailed=True
+            )
+            anova_type = 'Repeated Measures ANOVA'
+        except:
+            # If rm_anova fails (e.g., unbalanced design), use mixed_anova
+            try:
+                aov = pg.mixed_anova(
+                    data=band_anova_df,
+                    dv='power',
+                    within='condition',
+                    between='taste',
+                    subject='animal',
+                    correction=True
+                )
+                anova_type = 'Mixed ANOVA'
+            except:
+                # If both fail, skip this band
+                print(f"\n{band_name.upper()} ({freq_bands[band_name][0]}-{freq_bands[band_name][1]} Hz):")
+                print("  Could not perform ANOVA (insufficient data or unbalanced design)")
+                continue
+        
+        print(f"\n{band_name.upper()} ({freq_bands[band_name][0]}-{freq_bands[band_name][1]} Hz) - {anova_type}:")
+        print(aov.to_string())
+        
+        # Store results
+        aov['band'] = band_name
+        aov['anova_type'] = anova_type
+        anova_results_list.append(aov)
+
+if anova_results_list:
+    anova_results_df = pd.concat(anova_results_list, ignore_index=True)
+    # Save ANOVA results
+    anova_results_path = os.path.join(artifacts_dir, 'band_power_anova_results.csv')
+    anova_results_df.to_csv(anova_results_path, index=False)
+    print(f"\nANOVA results saved to: {anova_results_path}")
+
+print("="*80 + "\n")
 
 # Create bar plots organized by frequency band (subplots) with tastes on x-axis
 n_bands = len(freq_bands)
