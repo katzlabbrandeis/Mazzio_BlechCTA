@@ -529,33 +529,13 @@ for band_name in freq_bands.keys():
         animals_per_taste = band_anova_df.groupby('taste')['animal'].apply(set)
         all_animals = set.union(*animals_per_taste.values)
         
-        # Use rm_anova if we have the same animals across conditions
-        try:
-            aov = pg.rm_anova(
-                data=band_anova_df,
-                dv='power',
-                within=['condition', 'taste'],
-                subject='animal',
-                detailed=True
-            )
-            anova_type = 'Repeated Measures ANOVA'
-        except:
-            # If rm_anova fails (e.g., unbalanced design), use mixed_anova
-            try:
-                aov = pg.mixed_anova(
-                    data=band_anova_df,
-                    dv='power',
-                    within='condition',
-                    between='taste',
-                    subject='animal',
-                    correction=True
-                )
-                anova_type = 'Mixed ANOVA'
-            except:
-                # If both fail, skip this band
-                print(f"\n{band_name.upper()} ({freq_bands[band_name][0]}-{freq_bands[band_name][1]} Hz):")
-                print("  Could not perform ANOVA (insufficient data or unbalanced design)")
-                continue
+        # Use 2-way anova
+        aov = pg.anova(
+               data=band_anova_df, 
+               dv='power', 
+               between=['taste', 'condition'],
+               detailed=True,
+               )
         
         print(f"\n{band_name.upper()} ({freq_bands[band_name][0]}-{freq_bands[band_name][1]} Hz) - {anova_type}:")
         print(aov.to_string())
