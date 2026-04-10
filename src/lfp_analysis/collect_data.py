@@ -554,6 +554,118 @@ if anova_results_list:
 
 print("="*80 + "\n")
 
+# Create a single plot showing average pre vs post for each taste across frequency bands
+# Calculate average pre and post power for each taste across all frequency bands
+taste_avg_data = []
+for taste in norm_band_power_df['taste'].unique():
+    taste_data = norm_band_power_df[norm_band_power_df['taste'] == taste]
+    for band_name in freq_bands.keys():
+        band_data = taste_data[taste_data['band'] == band_name]
+        if len(band_data) > 0:
+            avg_pre = band_data['norm_pre_power'].mean()
+            avg_post = band_data['norm_post_power'].mean()
+            taste_avg_data.append({
+                'taste': taste,
+                'band': band_name,
+                'avg_pre_power': avg_pre,
+                'avg_post_power': avg_post
+            })
+
+taste_avg_df = pd.DataFrame(taste_avg_data)
+
+# Create single subplot with frequency bands on x-axis
+fig, ax = plt.subplots(figsize=(10, 6))
+
+band_names = list(freq_bands.keys())
+x_positions = np.arange(len(band_names))
+bar_width = 0.35
+
+# Calculate overall mean and SEM across all tastes for each band
+pre_means = []
+pre_sems = []
+post_means = []
+post_sems = []
+p_values = []
+
+for band_name in band_names:
+    band_data = taste_avg_df[taste_avg_df['band'] == band_name]
+    if len(band_data) > 0:
+        pre_means.append(band_data['avg_pre_power'].mean())
+        pre_sems.append(band_data['avg_pre_power'].sem())
+        post_means.append(band_data['avg_post_power'].mean())
+        post_sems.append(band_data['avg_post_power'].sem())
+        
+        # Perform paired t-test
+        if len(band_data) > 1:
+            t_stat, p_val = stats.ttest_rel(band_data['avg_pre_power'], band_data['avg_post_power'])
+            p_values.append(p_val)
+        else:
+            p_values.append(np.nan)
+    else:
+        pre_means.append(0)
+        pre_sems.append(0)
+        post_means.append(0)
+        post_sems.append(0)
+        p_values.append(np.nan)
+
+# Plot bars
+ax.bar(x_positions - bar_width/2, pre_means, bar_width, 
+       yerr=pre_sems, label='Pre-changepoint', alpha=0.7, capsize=5, color='steelblue')
+ax.bar(x_positions + bar_width/2, post_means, bar_width,
+       yerr=post_sems, label='Post-changepoint', alpha=0.7, capsize=5, color='coral')
+
+# Overlay paired scatter plots for each taste
+colors = plt.cm.tab10(np.linspace(0, 1, len(taste_avg_df['taste'].unique())))
+for taste_idx, taste in enumerate(sorted(taste_avg_df['taste'].unique())):
+    taste_data = taste_avg_df[taste_avg_df['taste'] == taste]
+    
+    for band_idx, band_name in enumerate(band_names):
+        band_taste_data = taste_data[taste_data['band'] == band_name]
+        if len(band_taste_data) > 0:
+            # Add jitter to x positions for visibility
+            jitter = 0.08
+            pre_x = x_positions[band_idx] - bar_width/2 + np.random.normal(0, jitter)
+            post_x = x_positions[band_idx] + bar_width/2 + np.random.normal(0, jitter)
+            
+            # Plot individual taste data points
+            row = band_taste_data.iloc[0]
+            ax.plot([pre_x, post_x], [row['avg_pre_power'], row['avg_post_power']], 
+                   'o-', color=colors[taste_idx], alpha=0.7, markersize=6, linewidth=1.5,
+                   label=taste.capitalize() if band_idx == 0 else '')
+
+# Add significance stars above bars
+y_max = max(max(pre_means), max(post_means)) if pre_means and post_means else 1
+for band_idx, p_val in enumerate(p_values):
+    if not np.isnan(p_val):
+        if p_val < 0.001:
+            sig_text = '***'
+        elif p_val < 0.01:
+            sig_text = '**'
+        elif p_val < 0.05:
+            sig_text = '*'
+        else:
+            sig_text = 'ns'
+        
+        # Place significance marker above the bars
+        y_pos = y_max * 1.15
+        ax.text(x_positions[band_idx], y_pos, sig_text, 
+               ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+ax.set_xlabel('Frequency Band', fontsize=12)
+ax.set_ylabel('Normalized Power (to mean)', fontsize=12)
+ax.set_title('Taste-Averaged Band Power: Pre vs Post Changepoint\n(Individual tastes shown as colored lines)\n(* p<0.05, ** p<0.01, *** p<0.001, ns=not significant)', 
+             fontsize=13)
+ax.set_xticks(x_positions)
+ax.set_xticklabels([f'{bn}\n({freq_bands[bn][0]}-{freq_bands[bn][1]} Hz)' for bn in band_names], rotation=0)
+ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=10)
+ax.grid(axis='y', alpha=0.3)
+ax.axhline(1.0, color='k', linestyle='--', linewidth=1, alpha=0.5)  # Reference line at normalized mean
+
+plt.tight_layout()
+plt_path = os.path.join(plot_dir, 'taste_averaged_band_power_pre_post_changepoint.png')
+plt.savefig(plt_path, bbox_inches='tight', dpi=300)
+plt.close()
+
 # Create bar plots organized by frequency band (subplots) with tastes on x-axis
 n_bands = len(freq_bands)
 fig, axes = plt.subplots(1, n_bands, figsize=(5*n_bands, 5), sharey=True)
