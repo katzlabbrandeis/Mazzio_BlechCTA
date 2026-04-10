@@ -116,6 +116,15 @@ for this_row in tqdm(pkl_df.iterrows(), total=len(pkl_df)):
 ############################################################
 ############################################################
 
+##############################
+# Compile everything into a single dataframe for easier access
+compiled_data_file_list = os.listdir(lfp_med_out_dir)
+compiled_data = [
+    pd.read_pickle(os.path.join(lfp_med_out_dir, f)) for f in compiled_data_file_list if f.endswith('.pkl')
+]
+compiled_df = pd.DataFrame(compiled_data)
+# 'pre_stim_med' column contains list of arrays (one for each taste) with shape (n_trials, n_freqs) 
+
 # Extract behavioral changepoints and try to align with LFP data (not sure if this will work but worth a try)
 # transition_data_dir = '/media/bigdata/firing_space_plot/emg_analysis/CM_behavior_transitions/data'
 # *** Repo was reorganized ***
@@ -134,14 +143,6 @@ len(np.setdiff1d(
     compiled_df['animal'].unique()
 ))
 
-##############################
-# Compile everything into a single dataframe for easier access
-compiled_data_file_list = os.listdir(lfp_med_out_dir)
-compiled_data = [
-    pd.read_pickle(os.path.join(lfp_med_out_dir, f)) for f in compiled_data_file_list if f.endswith('.pkl')
-]
-compiled_df = pd.DataFrame(compiled_data)
-# 'pre_stim_med' column contains list of arrays (one for each taste) with shape (n_trials, n_freqs) 
 # Make plots
 
 this_plot_dir = os.path.join(plot_dir, 'pre_stim_spectrograms')
