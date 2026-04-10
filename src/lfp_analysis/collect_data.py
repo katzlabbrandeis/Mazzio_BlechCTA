@@ -371,14 +371,31 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
 
 band_power_df = pd.DataFrame(band_power_data)
 
+# Normalize band power data to mean of pre+post for each band and animal
+normalized_band_power_data = []
+for idx, row in band_power_df.iterrows():
+    mean_power = (row['pre_power'] + row['post_power']) / 2
+    norm_pre = row['pre_power'] / mean_power if mean_power > 0 else 0
+    norm_post = row['post_power'] / mean_power if mean_power > 0 else 0
+    
+    normalized_band_power_data.append({
+        'animal': row['animal'],
+        'taste': row['taste'],
+        'band': row['band'],
+        'norm_pre_power': norm_pre,
+        'norm_post_power': norm_post
+    })
+
+norm_band_power_df = pd.DataFrame(normalized_band_power_data)
+
 # Create bar plots with paired scatter plots for each taste
-n_tastes = band_power_df['taste'].nunique()
+n_tastes = norm_band_power_df['taste'].nunique()
 n_bands = len(freq_bands)
 fig, axes = plt.subplots(1, n_tastes, figsize=(4*n_tastes, 5), sharey=True)
 if n_tastes == 1:
     axes = [axes]
 
-taste_grouped = band_power_df.groupby('taste')
+taste_grouped = norm_band_power_df.groupby('taste')
 for ax_ind, (taste_name, taste_df) in enumerate(taste_grouped):
     ax = axes[ax_ind]
     
@@ -392,19 +409,28 @@ for ax_ind, (taste_name, taste_df) in enumerate(taste_grouped):
     pre_sems = []
     post_means = []
     post_sems = []
+    p_values = []
     
     for band_name in band_names:
         band_data = taste_df[taste_df['band'] == band_name]
         if len(band_data) > 0:
-            pre_means.append(band_data['pre_power'].mean())
-            pre_sems.append(band_data['pre_power'].sem())
-            post_means.append(band_data['post_power'].mean())
-            post_sems.append(band_data['post_power'].sem())
+            pre_means.append(band_data['norm_pre_power'].mean())
+            pre_sems.append(band_data['norm_pre_power'].sem())
+            post_means.append(band_data['norm_post_power'].mean())
+            post_sems.append(band_data['norm_post_power'].sem())
+            
+            # Perform paired t-test
+            if len(band_data) > 1:
+                t_stat, p_val = stats.ttest_rel(band_data['norm_pre_power'], band_data['norm_post_power'])
+                p_values.append(p_val)
+            else:
+                p_values.append(np.nan)
         else:
             pre_means.append(0)
             pre_sems.append(0)
             post_means.append(0)
             post_sems.append(0)
+            p_values.append(np.nan)
     
     # Plot bars
     ax.bar(x_positions - bar_width/2, pre_means, bar_width, 
@@ -423,21 +449,40 @@ for ax_ind, (taste_name, taste_df) in enumerate(taste_grouped):
             
             # Plot individual animal data points
             for i, (idx, row) in enumerate(band_data.iterrows()):
-                ax.plot([pre_x[i], post_x[i]], [row['pre_power'], row['post_power']], 
+                ax.plot([pre_x[i], post_x[i]], [row['norm_pre_power'], row['norm_post_power']], 
                        'o-', color='gray', alpha=0.5, markersize=4, linewidth=1)
     
+    # Add significance stars above bars
+    y_max = max(max(pre_means), max(post_means))
+    for band_idx, p_val in enumerate(p_values):
+        if not np.isnan(p_val):
+            if p_val < 0.001:
+                sig_text = '***'
+            elif p_val < 0.01:
+                sig_text = '**'
+            elif p_val < 0.05:
+                sig_text = '*'
+            else:
+                sig_text = 'ns'
+            
+            # Place significance marker above the bars
+            y_pos = y_max * 1.1
+            ax.text(x_positions[band_idx], y_pos, sig_text, 
+                   ha='center', va='bottom', fontsize=10)
+    
     ax.set_xlabel('Frequency Band')
-    ax.set_ylabel('Median Power')
+    ax.set_ylabel('Normalized Power (to mean)')
     ax.set_title(f'{taste_name.capitalize()}')
     ax.set_xticks(x_positions)
     ax.set_xticklabels(band_names)
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
-    ax.set_yscale('log')  # Use log scale for better visibility of differences across bands
+    ax.axhline(1.0, color='k', linestyle='--', linewidth=1, alpha=0.5)  # Reference line at normalized mean
 
-fig.suptitle('Band Median Power: Pre vs Post Changepoint', fontsize=14, y=1.02)
+fig.suptitle('Normalized Band Power: Pre vs Post Changepoint\n(* p<0.05, ** p<0.01, *** p<0.001, ns=not significant)', 
+             fontsize=14, y=1.02)
 plt.tight_layout()
-plt_path = os.path.join(plot_dir, 'band_power_pre_post_changepoint_paired.png')
+plt_path = os.path.join(plot_dir, 'band_power_pre_post_changepoint_paired_normalized.png')
 plt.savefig(plt_path, bbox_inches='tight', dpi=300)
 plt.close()
 
