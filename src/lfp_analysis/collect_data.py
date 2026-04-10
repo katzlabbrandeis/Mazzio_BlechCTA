@@ -530,6 +530,7 @@ for band_name in freq_bands.keys():
         all_animals = set.union(*animals_per_taste.values)
         
         # Use 2-way anova
+        anova_type = '2-way ANOVA'
         aov = pg.anova(
                data=band_anova_df, 
                dv='power', 
