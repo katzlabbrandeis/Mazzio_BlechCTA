@@ -489,10 +489,9 @@ plt.close()
 
 # Create bar plots organized by frequency band (subplots) with tastes on x-axis
 n_bands = len(freq_bands)
-n_cols = 3
-n_rows = int(np.ceil(n_bands / n_cols))
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows), sharey=True)
-axes = axes.flatten()
+fig, axes = plt.subplots(1, n_bands, figsize=(5*n_bands, 5), sharey=True)
+if n_bands == 1:
+    axes = [axes]
 
 band_names = list(freq_bands.keys())
 for band_idx, band_name in enumerate(band_names):
@@ -586,12 +585,8 @@ for band_idx, band_name in enumerate(band_names):
     ax.grid(axis='y', alpha=0.3)
     ax.axhline(1.0, color='k', linestyle='--', linewidth=1, alpha=0.5)  # Reference line at normalized mean
 
-# Hide any unused subplots
-for idx in range(n_bands, len(axes)):
-    axes[idx].set_visible(False)
-
 fig.suptitle('Normalized Band Power by Taste: Pre vs Post Changepoint\n(* p<0.05, ** p<0.01, *** p<0.001, ns=not significant)', 
-             fontsize=14, y=0.995)
+             fontsize=14, y=1.02)
 plt.tight_layout()
 plt_path = os.path.join(plot_dir, 'band_power_by_taste_pre_post_changepoint_paired_normalized.png')
 plt.savefig(plt_path, bbox_inches='tight', dpi=300)
