@@ -433,6 +433,7 @@ for ax_ind, (taste_name, taste_df) in enumerate(taste_grouped):
     ax.set_xticklabels(band_names)
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
+    ax.set_yscale('log')  # Use log scale for better visibility of differences across bands
 
 fig.suptitle('Band Median Power: Pre vs Post Changepoint', fontsize=14, y=1.02)
 plt.tight_layout()
