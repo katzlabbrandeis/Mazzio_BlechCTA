@@ -13,16 +13,39 @@ Scripts used for Christina's Ph.D. thesis on neural mechanisms underlying learne
     - `neural_behavior_correlations_aggregate.py` - Neural-behavior correlation analysis
   - `gape_temporal_difference/` - Temporal analysis of gaping behavior
     - `gapes_temporal_features.py` - Feature extraction for gape analysis
-    - `gapes_temporal_pymc.py` - PyMC modeling for gape analysis
+  - `lfp_analysis/` - Local field potential analysis
+    - `collect_data.py` - Data collection for LFP analysis
+    - `cross_trial_analysis.py` - Cross-trial LFP analysis
+    - `plot_LFP_spectrogram.py` - LFP spectrogram visualization
+    - `data_dirs_LFP.txt` - Configuration file for LFP data directories
+    - `notes.txt` - Analysis notes and documentation
   - `multibehavior_transition/` - Multi-behavior transition analysis
     - `multibehavior_transition.py` - Main transition analysis script
+    - `DEPENDENCIES.md` - Dependencies documentation
+    - `NOTE.txt` - Analysis notes and documentation
 - `data/` - Processed data files
   - `changepoint_gapes/` - Changepoint detection data for gapes
-  - `multibehavior_transition/` - Behavior transition data
+    - `gapes_cp02_df.pkl` - Changepoint 0-2 dataframe
+    - `gapes_cp23_df.pkl` - Changepoint 2-3 dataframe
 - `artifacts/` - Generated analysis artifacts
   - `changepoint_gapes/` - Sorted features and labels (numpy arrays)
+    - `sorted_X.npy` - Sorted feature matrix
+    - `sorted_y.npy` - Sorted labels
+  - `lfp_analysis/` - LFP analysis artifacts
+    - `pre_stim_data/` - Pre-stimulus LFP data for individual sessions
 - `plots/` - Generated visualization outputs
-  - `changepoint_gapes/` - Gape-related plots (PCA, temporal evolution, feature space)
+  - `changepoint_gapes/` - Gape-related plots
+    - `binned_temporal_evolution_features.png` - Binned temporal feature evolution
+    - `binned_temporal_evolution_features_cutoff_200ms.png` - Binned temporal evolution with 200ms cutoff
+    - `binned_temporal_evolution_individual_features_cutoff_200ms.png` - Individual feature evolution with cutoff
+    - `pca_explained_variance_smoothed_binned_features.png` - PCA variance explained
+    - `temporal_evolution_features.png` - Temporal feature evolution
+    - `temporal_evolution_individual_features_cutoff_200ms.png` - Individual feature temporal evolution
+  - `lfp_analysis/` - LFP analysis plots
+    - `median_diff_z_power_pre_post_changepoint.png` - Median power difference pre/post changepoint
+    - `pre_post_changepoint_spectrograms.png` - Spectrograms pre/post changepoint
+    - `taste_averaged_band_power_pre_post_changepoint.png` - Taste-averaged band power
+    - `pre_stim_spectrograms/` - Individual session pre-stimulus spectrograms
   - `multibehavior_transition/` - Behavior transition plots
     - `two_test_changepoint_plots/` - Individual session changepoint visualizations
 
