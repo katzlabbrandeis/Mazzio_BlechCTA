@@ -326,6 +326,119 @@ freq_bands = {
         'gamma': [30, 100]
         }
 
+# Calculate band power for pre and post changepoint for each animal and taste
+band_power_data = []
+for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
+    pre_stim_med = this_row['pre_stim_med']
+    taste_list = this_row['taste_list']
+    freq_vec = this_row['freq_vec']
+
+    # Try to find corresponding behavior changepoint data for this animal
+    chp_data = behavior_chp_df.query(f'basename == "{this_row["animal"]}"')
+    if len(chp_data) == 0:
+        continue
+
+    for i, taste in enumerate(taste_list):
+        # Make taste lower to match with behavior changepoint data
+        taste = taste.lower()
+        chp_row = chp_data.query(f'taste == "{taste}"')
+        if len(chp_row) == 0:
+            continue
+        mode_chp = chp_row['mode_changepoint'].values[0]
+
+        pre_chp_data = pre_stim_med[i][:mode_chp, :]
+        post_chp_data = pre_stim_med[i][mode_chp:, :]
+
+        # Calculate median power for each frequency band
+        for band_name, band_range in freq_bands.items():
+            band_inds = np.where((freq_vec >= band_range[0]) & (freq_vec <= band_range[1]))[0]
+            if len(band_inds) == 0:
+                continue
+            
+            # Calculate median across frequencies in band, then median across trials
+            pre_band_power = np.median(np.median(pre_chp_data[:, band_inds], axis=1))
+            post_band_power = np.median(np.median(post_chp_data[:, band_inds], axis=1))
+
+            out_dict = {
+                'animal': this_row['animal'],
+                'taste': taste,
+                'band': band_name,
+                'pre_power': pre_band_power,
+                'post_power': post_band_power
+            }
+            band_power_data.append(out_dict)
+
+band_power_df = pd.DataFrame(band_power_data)
+
+# Create bar plots with paired scatter plots for each taste
+n_tastes = band_power_df['taste'].nunique()
+n_bands = len(freq_bands)
+fig, axes = plt.subplots(1, n_tastes, figsize=(4*n_tastes, 5), sharey=True)
+if n_tastes == 1:
+    axes = [axes]
+
+taste_grouped = band_power_df.groupby('taste')
+for ax_ind, (taste_name, taste_df) in enumerate(taste_grouped):
+    ax = axes[ax_ind]
+    
+    # Calculate mean and SEM for each band
+    band_grouped = taste_df.groupby('band')
+    band_names = list(freq_bands.keys())
+    x_positions = np.arange(len(band_names))
+    bar_width = 0.35
+    
+    pre_means = []
+    pre_sems = []
+    post_means = []
+    post_sems = []
+    
+    for band_name in band_names:
+        band_data = taste_df[taste_df['band'] == band_name]
+        if len(band_data) > 0:
+            pre_means.append(band_data['pre_power'].mean())
+            pre_sems.append(band_data['pre_power'].sem())
+            post_means.append(band_data['post_power'].mean())
+            post_sems.append(band_data['post_power'].sem())
+        else:
+            pre_means.append(0)
+            pre_sems.append(0)
+            post_means.append(0)
+            post_sems.append(0)
+    
+    # Plot bars
+    ax.bar(x_positions - bar_width/2, pre_means, bar_width, 
+           yerr=pre_sems, label='Pre-changepoint', alpha=0.7, capsize=5)
+    ax.bar(x_positions + bar_width/2, post_means, bar_width,
+           yerr=post_sems, label='Post-changepoint', alpha=0.7, capsize=5)
+    
+    # Overlay paired scatter plots
+    for band_idx, band_name in enumerate(band_names):
+        band_data = taste_df[taste_df['band'] == band_name]
+        if len(band_data) > 0:
+            # Add jitter to x positions for visibility
+            jitter = 0.05
+            pre_x = np.random.normal(x_positions[band_idx] - bar_width/2, jitter, size=len(band_data))
+            post_x = np.random.normal(x_positions[band_idx] + bar_width/2, jitter, size=len(band_data))
+            
+            # Plot individual animal data points
+            for i, (idx, row) in enumerate(band_data.iterrows()):
+                ax.plot([pre_x[i], post_x[i]], [row['pre_power'], row['post_power']], 
+                       'o-', color='gray', alpha=0.5, markersize=4, linewidth=1)
+    
+    ax.set_xlabel('Frequency Band')
+    ax.set_ylabel('Median Power')
+    ax.set_title(f'{taste_name.capitalize()}')
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(band_names)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+
+fig.suptitle('Band Median Power: Pre vs Post Changepoint', fontsize=14, y=1.02)
+plt.tight_layout()
+plt_path = os.path.join(plot_dir, 'band_power_pre_post_changepoint_paired.png')
+plt.savefig(plt_path, bbox_inches='tight', dpi=300)
+plt.close()
+
 ##############################
 # Plot median difference of z-scored power between pre and post changepoint for each taste, with filled area representing MAD 
 fig, ax = plt.subplots(figsize=(5, 5))
