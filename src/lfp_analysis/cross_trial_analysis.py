@@ -12,6 +12,7 @@ from scipy import stats
 import umap
 from sklearn.decomposition import PCA
 import pingouin as pg
+import seaborn as sns
 
 # base_dir = '/home/cmazzio/Desktop/Mazzio_BlechCTA'
 base_dir = '/media/bigdata/firing_space_plot/Mazzio_BlechCTA'
@@ -197,7 +198,7 @@ for ind, this_row in tqdm(train_day_compiled_df.iterrows(), total=len(train_day_
     for i, taste in enumerate(taste_list):
         taste = taste.lower()
         lfp_data = pre_stim_med[i]
-        lfp_med = np.median(pre_chp_data, axis=0)
+        lfp_med = np.median(lfp_data, axis=0)
 
         out_dict = {
             'animal': this_row['animal'],
@@ -328,6 +329,7 @@ for ind, this_row in tqdm(chp_lfp_df.iterrows(), total=len(chp_lfp_df)):
 
         out_dict = {
             'animal': this_row['animal'],
+            'test_day': this_row['test_day'],
             'taste': this_row['taste'],
             'band': band_name,
             'pre_power': pre_band_power,
@@ -336,6 +338,46 @@ for ind, this_row in tqdm(chp_lfp_df.iterrows(), total=len(chp_lfp_df)):
         band_power_data.append(out_dict)
 
 band_power_df = pd.DataFrame(band_power_data)
+
+# Also calcualte band power for train day data for comparison
+train_band_power_data = []
+for ind, this_row in tqdm(train_lfp_df.iterrows(), total=len(train_lfp_df)):
+    lfp_med = this_row['lfp_med']
+    freq_vec = this_row['freq_vec']
+    
+    for band_name, band_range in freq_bands.items():
+        band_inds = np.where((freq_vec >= band_range[0]) & (freq_vec <= band_range[1]))[0]
+        if len(band_inds) == 0:
+            continue
+        
+        band_power = np.median(lfp_med[band_inds])
+        
+        out_dict = {
+            'animal': this_row['animal'],
+            'taste': this_row['taste'],
+            'band': band_name,
+            'power': band_power
+        }
+        train_band_power_data.append(out_dict)
+train_band_power_df = pd.DataFrame(train_band_power_data)
+
+# Rename taste=='sac' to 'saccharin' in both dataframes for consistency
+train_band_power_df['taste'] = train_band_power_df['taste'].replace({'sac': 'saccharin'})
+# Add 'Train' as test_day for train_band_power_df to distinguish from test day data
+train_band_power_df['test_day'] = 'Train'
+
+# MAke boxplots to check whether there are any differences in band power across tastes on train day (should be no differences since no changepoints)
+fig, ax = plt.subplots(figsize=(8,5))
+sns.boxplot(data=train_band_power_df, x='band', y='power', hue='taste', ax=ax)
+ax.set_yscale('log')
+ax.set_title('Band Power Across Tastes on Train Day (No Changepoints)')
+ax.set_xlabel('Frequency Band')
+ax.set_ylabel('Median Power')
+ax.legend(title='Taste', bbox_to_anchor=(1.02, 1), loc='upper left')
+plt.tight_layout()
+plt_path = os.path.join(plot_dir, 'train_day_band_power_by_taste.png')
+plt.savefig(plt_path, bbox_inches='tight') 
+plt.close()
 
 ##############################
 # Normalize Band Power Data
