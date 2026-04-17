@@ -309,46 +309,31 @@ freq_bands = {
         }
 
 # Calculate band power for pre and post changepoint for each animal and taste
+# Use the previously generated chp_lfp_df which already has pre_chp_med and post_chp_med
 band_power_data = []
-for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
-    pre_stim_med = this_row['pre_stim_med']
-    taste_list = this_row['taste_list']
+for ind, this_row in tqdm(chp_lfp_df.iterrows(), total=len(chp_lfp_df)):
+    pre_chp_med = this_row['pre_chp_med']
+    post_chp_med = this_row['post_chp_med']
     freq_vec = this_row['freq_vec']
-
-    # Try to find corresponding behavior changepoint data for this animal
-    chp_data = behavior_chp_df.query(f'basename == "{this_row["animal"]}"')
-    if len(chp_data) == 0:
-        continue
-
-    for i, taste in enumerate(taste_list):
-        # Make taste lower to match with behavior changepoint data
-        taste = taste.lower()
-        chp_row = chp_data.query(f'taste == "{taste}"')
-        if len(chp_row) == 0:
+    
+    # Calculate median power for each frequency band
+    for band_name, band_range in freq_bands.items():
+        band_inds = np.where((freq_vec >= band_range[0]) & (freq_vec <= band_range[1]))[0]
+        if len(band_inds) == 0:
             continue
-        mode_chp = chp_row['mode_changepoint'].values[0]
+        
+        # Calculate median across frequencies in band (data is already median across trials)
+        pre_band_power = np.median(pre_chp_med[band_inds])
+        post_band_power = np.median(post_chp_med[band_inds])
 
-        pre_chp_data = pre_stim_med[i][:mode_chp, :]
-        post_chp_data = pre_stim_med[i][mode_chp:, :]
-
-        # Calculate median power for each frequency band
-        for band_name, band_range in freq_bands.items():
-            band_inds = np.where((freq_vec >= band_range[0]) & (freq_vec <= band_range[1]))[0]
-            if len(band_inds) == 0:
-                continue
-            
-            # Calculate median across frequencies in band, then median across trials
-            pre_band_power = np.median(np.median(pre_chp_data[:, band_inds], axis=1))
-            post_band_power = np.median(np.median(post_chp_data[:, band_inds], axis=1))
-
-            out_dict = {
-                'animal': this_row['animal'],
-                'taste': taste,
-                'band': band_name,
-                'pre_power': pre_band_power,
-                'post_power': post_band_power
-            }
-            band_power_data.append(out_dict)
+        out_dict = {
+            'animal': this_row['animal'],
+            'taste': this_row['taste'],
+            'band': band_name,
+            'pre_power': pre_band_power,
+            'post_power': post_band_power
+        }
+        band_power_data.append(out_dict)
 
 band_power_df = pd.DataFrame(band_power_data)
 
