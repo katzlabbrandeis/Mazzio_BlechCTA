@@ -38,6 +38,11 @@ compiled_data = [
 compiled_df = pd.DataFrame(compiled_data)
 # 'pre_stim_med' column contains list of arrays (one for each taste) with shape (n_trials, n_freqs) 
 
+# Rename 'animal' column to 'session' for clarity (since it includes session info)
+compiled_df.rename(columns={'animal': 'basename'}, inplace=True)
+# Extract base animal name from session for easier merging with behavior changepoint data
+compiled_df['animal'] = compiled_df['basename'].apply(lambda x: x.split('_')[0])
+
 # Extract behavioral changepoints and try to align with LFP data (not sure if this will work but worth a try)
 # transition_data_dir = '/media/bigdata/firing_space_plot/emg_analysis/CM_behavior_transitions/data'
 # *** Repo was reorganized ***
@@ -53,8 +58,13 @@ behavior_chp_df = pd.read_pickle(os.path.join(transition_data_dir, 'behavior_cha
 # set(behavior_chp_df['basename']).intersection(set(compiled_df['animal']))
 len(np.setdiff1d(
     behavior_chp_df['basename'].unique(), 
-    compiled_df['animal'].unique()
+    compiled_df['basename'].unique()
 ))
+
+##############################
+# Extract train day data for comparison with pre-post test days 
+##############################
+train_day_compiled_df = compiled_df[compiled_df.basename.str.contains('train', case=False)]
 
 ##############################
 # Generate Pre-Stimulus Spectrograms with Changepoints
@@ -129,9 +139,18 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
     assert len(pre_stim_med) == len(taste_list), f"Expected pre_stim_med and taste_list to have same length, got {len(pre_stim_med)} and {len(taste_list)}"
 
     # Try to find corresponding behavior changepoint data for this animal
-    chp_data = behavior_chp_df.query(f'basename == "{this_row["animal"]}"')
+    chp_data = behavior_chp_df.query(f'basename == "{this_row["basename"]}"')
     if len(chp_data) == 0:
         continue
+
+    # Check whether basename contain Test1 or Test2
+    test_day = None
+    if 'test1' in this_row['basename'].lower():
+        test_day = 'Test1'
+    elif 'test2' in this_row['basename'].lower():
+        test_day = 'Test2'
+    elif 'test' in this_row['basename'].lower():
+        test_day = 'Test1'
 
     for i, taste in enumerate(taste_list):
         # Make taste lower to match with behavior changepoint data
@@ -148,7 +167,9 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
         post_chp_med = np.median(post_chp_data, axis=0)
 
         out_dict = {
-            'animal': this_row['animal'],
+            'animal': this_row['animal'], 
+            'basename': this_row['basename'],
+            'test_day': test_day,
             'taste': taste,
             'pre_chp_med': pre_chp_med,
             'post_chp_med': post_chp_med,
@@ -159,6 +180,46 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
 chp_lfp_df = pd.DataFrame(chp_lfp_data)
 # Explode pre_chp_med, post_chp_med, and freq_vec into long format for easier plotting
 # chp_lfp_long_df = chp_lfp_df.explode(['pre_chp_med', 'post_chp_med', 'freq_vec'])
+
+# Same as above but pull out data for train day animals only for comparison with pre-post test day data
+# Not looking for changepoints on train day, aggregate across all trials
+train_lfp_data = []
+for ind, this_row in tqdm(train_day_compiled_df.iterrows(), total=len(train_day_compiled_df)):
+    if 'train' not in this_row['basename'].lower():
+        continue
+
+    pre_stim_med = this_row['pre_stim_med']
+    taste_list = this_row['taste_list']
+    freq_vec = this_row['freq_vec']
+
+    assert len(pre_stim_med) == len(taste_list), f"Expected pre_stim_med and taste_list to have same length, got {len(pre_stim_med)} and {len(taste_list)}"
+
+    for i, taste in enumerate(taste_list):
+        taste = taste.lower()
+        lfp_data = pre_stim_med[i]
+        lfp_med = np.median(pre_chp_data, axis=0)
+
+        out_dict = {
+            'animal': this_row['animal'],
+            'basename': this_row['basename'],
+            'taste': taste,
+            'lfp_med': lfp_med,
+            'freq_vec': freq_vec
+        }
+        train_lfp_data.append(out_dict)
+
+train_lfp_df = pd.DataFrame(train_lfp_data)
+
+# # Merge train_lfp_df with chp_lfp_df to have train and test day data in the same dataframe for easier comparison
+# train_test_lfp_df = pd.merge(
+#     chp_lfp_df, 
+#     train_lfp_df[['animal', 'taste', 'lfp_med']], 
+#     on=['animal', 'taste'], 
+#     how='left', 
+#     suffixes=('', '_train')
+# )
+#
+##############################
 
 # Plot pre and post changepoint medians for each taste, stacked
 med_diff_data_z_list = []
