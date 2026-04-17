@@ -31,6 +31,10 @@ lfp_med_out_dir = os.path.join(artifacts_dir, 'pre_stim_data')
 # Data Loading and Compilation
 ##############################
 
+# Remove any animals from compiled data that are in the control group 
+sal_control_animals = ['CM41', 'CM43', 'SF7', 'CM68', 'CM69']
+
+
 # Compile everything into a single dataframe for easier access
 compiled_data_file_list = os.listdir(lfp_med_out_dir)
 compiled_data = [
