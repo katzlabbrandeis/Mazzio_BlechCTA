@@ -354,6 +354,7 @@ for ind, this_row in tqdm(train_lfp_df.iterrows(), total=len(train_lfp_df)):
         
         out_dict = {
             'animal': this_row['animal'],
+            'basename': this_row['basename'],
             'taste': this_row['taste'],
             'band': band_name,
             'power': band_power
@@ -378,6 +379,73 @@ plt.tight_layout()
 plt_path = os.path.join(plot_dir, 'train_day_band_power_by_taste.png')
 plt.savefig(plt_path, bbox_inches='tight') 
 plt.close()
+
+# No differences across tastes on train day, so we can average across tastes for train day data to have a single baseline for comparison with pre and post changepoint data on test days
+train_band_power_avg_df = train_band_power_df.groupby(
+        ['animal', 'band']).agg({'power': 'mean'}).reset_index()
+# Rename power to 'train_power' for clarity
+train_band_power_avg_df.rename(columns={'power': 'train_power'}, inplace=True)
+
+# Merge with band_power_df to have train power for comparison with pre and post changepoint power
+band_power_df = pd.merge(
+        band_power_df, 
+        train_band_power_avg_df[['animal', 'band', 'train_power']], 
+        on=['animal', 'band'], 
+        how='left'
+        )
+
+# Normalize pre and post changepoint band power to train power
+band_power_df['norm_pre_power'] = band_power_df['pre_power'] / band_power_df['train_power']
+band_power_df['norm_post_power'] = band_power_df['post_power'] / band_power_df['train_power']
+
+
+###############
+# Plot normalized band power for pre and post changepoint for each taste, stacked
+# Melt the dataframe to long format for easier plotting with seaborn
+plot_df = band_power_df.drop(columns=['pre_power', 'post_power', 'train_power'])
+plot_df = plot_df.melt(
+    id_vars=['animal', 'test_day', 'taste', 'band'], 
+    value_vars=['norm_pre_power', 'norm_post_power'], 
+    var_name='condition', 
+    value_name='normalized_power'
+)
+# Replace condition names for better readability
+plot_df['condition'] = plot_df['condition'].replace({
+    'norm_pre_power': 'Pre',
+    'norm_post_power': 'Post'
+})
+
+# First average by taste, band, and condition
+plot_df = plot_df.groupby(['taste', 'band', 'condition']).agg({
+    'normalized_power': ['mean', 'sem']
+}).reset_index()
+# Unstack the multi-level columns created by aggregation
+plot_df.columns = ['taste', 'band', 'condition', 'mean', 'sem']
+
+# This is giving different results than those expected by the `taste_averaged_band_power_pre_post_changepoint` plot
+# Need to revisit data processing
+g = sns.catplot(
+    data=plot_df, 
+    x='band', 
+    y='mean', 
+    hue='condition', 
+    kind='swarm', 
+    dodge=True,
+    palette='Set2',
+    height=4, 
+    aspect=1,
+    legend=False,
+)
+g.set_axis_labels("Frequency Band", "Normalized Power (to Train)")
+g.set_titles("{col_name}")
+g.fig.suptitle("Normalized Band Power Pre vs Post Changepoint by Taste\n(Error bars show SD across animals)", y=1.02)
+# Put the legend outside the plot
+plt.legend(title='Condition', bbox_to_anchor=(1.02, 1), loc='upper left')
+plt.tight_layout()
+plt_path = os.path.join(plot_dir, 'normalized_band_power_pre_post_changepoint_by_taste.png')
+plt.savefig(plt_path, bbox_inches='tight', dpi=300)
+plt.close()
+
 
 ##############################
 # Normalize Band Power Data
