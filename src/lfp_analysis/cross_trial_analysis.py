@@ -1,3 +1,7 @@
+##############################
+# Imports and Setup
+##############################
+
 import os
 from tqdm import tqdm
 from pprint import pprint as pp
@@ -23,7 +27,9 @@ os.makedirs(plot_dir, exist_ok=True)
 lfp_med_out_dir = os.path.join(artifacts_dir, 'pre_stim_data')
 
 ##############################
+# Data Loading and Compilation
 ##############################
+
 # Compile everything into a single dataframe for easier access
 compiled_data_file_list = os.listdir(lfp_med_out_dir)
 compiled_data = [
@@ -50,7 +56,9 @@ len(np.setdiff1d(
     compiled_df['animal'].unique()
 ))
 
-# Make plots
+##############################
+# Generate Pre-Stimulus Spectrograms with Changepoints
+##############################
 
 this_plot_dir = os.path.join(plot_dir, 'pre_stim_spectrograms')
 os.makedirs(this_plot_dir, exist_ok=True)
@@ -109,7 +117,8 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
     plt.close()
 
 ##############################
-# For matching lfp and behavior data, plot average before and after changepoint for each taste, and see if there are any differences in the spectrograms 
+# Pre/Post Changepoint Spectrogram Analysis
+##############################
 
 chp_lfp_data = []
 for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
@@ -225,7 +234,10 @@ plt_path = os.path.join(plot_dir, 'pre_post_changepoint_spectrograms.png')
 plt.savefig(plt_path, bbox_inches='tight')
 plt.close()
 
-# Break down into frequency bands and plot
+##############################
+# Frequency Band Power Analysis
+##############################
+
 freq_bands = {
         'delta': [1, 4],
         'theta': [4, 8],
@@ -279,7 +291,10 @@ for ind, this_row in tqdm(compiled_df.iterrows(), total=len(compiled_df)):
 
 band_power_df = pd.DataFrame(band_power_data)
 
-# Normalize band power data to mean of pre+post for each band and animal
+##############################
+# Normalize Band Power Data
+##############################
+
 normalized_band_power_data = []
 for idx, row in band_power_df.iterrows():
     mean_power = (row['pre_power'] + row['post_power']) / 2
@@ -296,7 +311,10 @@ for idx, row in band_power_df.iterrows():
 
 norm_band_power_df = pd.DataFrame(normalized_band_power_data)
 
-# Create bar plots with paired scatter plots for each taste
+##############################
+# Plot Band Power by Taste (Individual Taste Subplots)
+##############################
+
 n_tastes = norm_band_power_df['taste'].nunique()
 n_bands = len(freq_bands)
 fig, axes = plt.subplots(1, n_tastes, figsize=(4*n_tastes, 5), sharey=True)
@@ -394,7 +412,10 @@ plt_path = os.path.join(plot_dir, 'band_power_pre_post_changepoint_paired_normal
 plt.savefig(plt_path, bbox_inches='tight', dpi=300)
 plt.close()
 
-# Prepare data for 2-way ANOVA (pre/post x taste)
+##############################
+# Statistical Analysis: 2-Way ANOVA
+##############################
+
 # Convert normalized band power data to long format for ANOVA
 anova_data_list = []
 for idx, row in norm_band_power_df.iterrows():
@@ -461,7 +482,10 @@ if anova_results_list:
 
 print("="*80 + "\n")
 
-# Create a single plot showing average pre vs post for each taste across frequency bands
+##############################
+# Plot Taste-Averaged Band Power Across All Frequency Bands
+##############################
+
 # Calculate average pre and post power for each taste across all frequency bands
 taste_avg_data = []
 for taste in norm_band_power_df['taste'].unique():
@@ -573,7 +597,10 @@ plt_path = os.path.join(plot_dir, 'taste_averaged_band_power_pre_post_changepoin
 plt.savefig(plt_path, bbox_inches='tight', dpi=300)
 plt.close()
 
-# Create bar plots organized by frequency band (subplots) with tastes on x-axis
+##############################
+# Plot Band Power by Frequency Band (Individual Band Subplots)
+##############################
+
 n_bands = len(freq_bands)
 fig, axes = plt.subplots(1, n_bands, figsize=(5*n_bands, 5), sharey=True)
 if n_bands == 1:
@@ -679,6 +706,9 @@ plt.savefig(plt_path, bbox_inches='tight', dpi=300)
 plt.close()
 
 ##############################
+# Plot Median Difference of Z-Scored Power
+##############################
+
 # Plot median difference of z-scored power between pre and post changepoint for each taste, with filled area representing MAD 
 fig, ax = plt.subplots(figsize=(5, 5))
 for ind, taste_name in enumerate(taste_grouped.groups.keys()):
@@ -697,7 +727,10 @@ plt_path = os.path.join(plot_dir, 'median_diff_z_power_pre_post_changepoint.png'
 plt.savefig(plt_path, bbox_inches='tight')
 plt.close()
 
-# Plot umap of pre and post changepoint data for each taste, colored by pre vs post changepoint
+##############################
+# Dimensionality Reduction: PCA and UMAP
+##############################
+
 embedding_data = []
 taste_grouped = chp_lfp_df.groupby('taste')
 for taste_name, this_df in taste_grouped:
